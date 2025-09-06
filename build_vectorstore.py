@@ -49,3 +49,17 @@ if __name__ == "__main__":
 
     chunks = chunk_lines(lines, chunk_size=10, overlap=3)
     print(f"[RAG] Created {len(chunks)} chunks.")
+
+    # Create Vector Database
+    embedding = SentenceTransformerEmbeddings(model_name=EMBED_MODEL_NAME) # convert text from chunks to vector
+
+    documents = [
+        Document(page_content=c, metadata={"source": os.path.basename(PDF_PATH), "id": str(i)})
+        for i, c in enumerate(chunks)
+    ]
+
+    print("[RAG] Building Chroma DB…")
+    vectorstore = Chroma.from_documents(documents, embedding, persist_directory=CHROMA_DIR)
+    vectorstore.persist()
+    print(f"[RAG] Vector DB built at: {CHROMA_DIR}")
+
