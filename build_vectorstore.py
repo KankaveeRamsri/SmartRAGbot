@@ -25,6 +25,17 @@ def extract_lines_from_pdf(path: str) -> List[str]:
                 lines.append(line.strip())
     return lines
 
+def chunk_lines(lines: List[str], chunk_size: int = 10, overlap: int = 3) -> List[str]:
+    chunks: List[str] = []
+    if chunk_size <= 0:
+        return chunks
+    step = max(1, chunk_size - overlap)
+    for i in range(0, len(lines), step):
+        chunk = "\n".join(lines[i : i + chunk_size])
+        if chunk.strip():
+            chunks.append(chunk)
+    return chunks
+
 if __name__ == "__main__":
     os.makedirs(CHROMA_DIR, exist_ok=True)
 
@@ -35,4 +46,6 @@ if __name__ == "__main__":
     print(f"[RAG] Extracting from {PDF_PATH}…")
     lines = extract_lines_from_pdf(PDF_PATH)
     print(f"[RAG] Extracted {len(lines)} lines.")
-    print(lines[500])
+
+    chunks = chunk_lines(lines, chunk_size=10, overlap=3)
+    print(f"[RAG] Created {len(chunks)} chunks.")
