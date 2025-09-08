@@ -49,3 +49,17 @@ def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k:
     response = chat_llm.invoke(prompt)
     answer = getattr(response, "content", None) or str(response)
     return answer.strip() if answer else "[ERROR] Empty response from LLM."
+
+app = Flask(__name__)
+line_bot_api = LineBotApi(CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(CHANNEL_SECRET)
+
+@app.route("/", methods=["POST"]) 
+def callback():
+    signature = request.headers.get("X-Line-Signature", "")
+    body = request.get_data(as_text=True)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return "OK"
