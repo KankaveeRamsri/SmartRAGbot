@@ -94,3 +94,18 @@ def handle_message(event: MessageEvent):
     if len(answer) > 1900:
         answer = answer[:1900] + "\n… (truncated)"
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
+
+if __name__ == "__main__":
+    print("[BOOT] Loading vectorstore…")
+    embedding = SentenceTransformerEmbeddings(model_name=EMBED_MODEL_NAME)
+    vectorstore = Chroma(persist_directory=CHROMA_DIR, embedding_function=embedding)
+
+    print("[BOOT] Initializing chat LLM…")
+    chat_llm = build_chat_llm()
+
+    app.config["VECTORSTORE"] = vectorstore
+    app.config["CHAT_LLM"] = chat_llm
+
+    port = int(os.environ.get("PORT", "5000"))
+    print(f"[RUN] Flask listening on Localhost:{port}")
+    app.run(port=port)
