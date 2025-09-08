@@ -17,3 +17,9 @@ RETRIEVAL_K = int(os.environ.get("RETRIEVAL_K", "3"))
 
 CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "10cc7f532a62b2208f2bdeb03148705d")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "o0rmXIz8Xk1QDlHDkPbgLglKWg+qXjzOPnJt/21VmAXGBYuXkFQKlIyt71CpXQrAndBq5tsDAoj9BL+UUiVqkXHj7X1LeM7kRUfoBAgcbTzfo+3me0MPhMcFyF0Hpo1zdrRhbvhzSb5fsbVRURAeVgdB04t89/1O/w1cDnyilFU=")
+
+def build_chat_llm():
+    model_name = os.environ.get("OLLAMA_MODEL", "granite3.3:latest")
+    chat_llm = ChatOllama(model=model_name)
+    print(f"[LLM] Using Ollama model: {model_name}")
+    return chat_llm
