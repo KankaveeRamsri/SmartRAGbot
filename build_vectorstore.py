@@ -25,7 +25,7 @@ def extract_lines_from_pdf(path: str) -> List[str]:
                 lines.append(line.strip())
     return lines
 
-def chunk_lines(lines: List[str], chunk_size: int = 10, overlap: int = 3) -> List[str]:
+def chunk_lines(lines: List[str], chunk_size: int = 300, overlap: int = 100) -> List[str]:
     chunks: List[str] = []
     if chunk_size <= 0:
         return chunks
