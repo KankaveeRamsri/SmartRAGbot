@@ -23,3 +23,20 @@ def build_chat_llm():
     chat_llm = ChatOllama(model=model_name)
     print(f"[LLM] Using Ollama model: {model_name}")
     return chat_llm
+
+def build_prompt(context: str, question: str) -> str:
+    return f"""
+        Context:
+        {context}
+
+        Role: You are an engineer.
+        Task:
+        - Use a warm and friendly tone
+        - Answer in English language.
+        - Summarize the information clearly and concisely
+        - Make it easy to understand, even for beginners
+        - Include relevant emojis such as 🔋☀️🔌 when appropriate
+
+        Question: {question}
+        Answer:
+        """.strip()
