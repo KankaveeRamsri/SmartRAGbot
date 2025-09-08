@@ -63,3 +63,34 @@ def callback():
     except InvalidSignatureError:
         abort(400)
     return "OK"
+
+@handler.add(MessageEvent, message=TextMessage) 
+def handle_message(event: MessageEvent):
+    user_text = (event.message.text or "").strip()
+    if not user_text:
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text="(empty message)"))
+        return
+
+    if user_text.lower() in {"/help", "help"}:
+        help_msg = (
+            "Hi! Send me a question about the PDF and I'll answer using RAG.\n\n"
+            "Commands:\n"
+            "- /source : show PDF + embedding info\n"
+            "- /id : echo message id\n"
+        )
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=help_msg))
+        return
+
+    if user_text.lower() == "/source":
+        info = f"Indexed PDF: {os.path.basename(PDF_PATH)}\nEmbeddings: {EMBED_MODEL_NAME}\nTop-k: {RETRIEVAL_K}"
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=info))
+        return
+
+    if user_text.lower() == "/id":
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"msg id: {event.message.id}"))
+        return
+
+    answer = make_rag_answer(app.config["VECTORSTORE"], app.config["CHAT_LLM"], user_text, k=RETRIEVAL_K)
+    if len(answer) > 1900:
+        answer = answer[:1900] + "\n… (truncated)"
+    line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
