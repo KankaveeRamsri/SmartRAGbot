@@ -40,3 +40,12 @@ def build_prompt(context: str, question: str) -> str:
         Question: {question}
         Answer:
         """.strip()
+
+def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k: int = 3) -> str:
+    retriever = vectorstore.as_retriever(search_kwargs={"k": k})
+    docs: List[Document] = retriever.get_relevant_documents(question)
+    context = "\n\n---\n\n".join(d.page_content for d in docs) if docs else "[No document found]"
+    prompt = build_prompt(context=context, question=question)
+    response = chat_llm.invoke(prompt)
+    answer = getattr(response, "content", None) or str(response)
+    return answer.strip() if answer else "[ERROR] Empty response from LLM."
