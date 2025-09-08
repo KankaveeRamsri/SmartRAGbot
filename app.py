@@ -13,13 +13,13 @@ from langchain_community.chat_models import ChatOllama
 PDF_PATH = os.environ.get("RAG_PDF_PATH", "C:\\Users\\student\\Desktop\\6610110408\\Miniproject-social-2\\pdf-files\\5-dimentions-happiness.pdf")
 CHROMA_DIR = os.environ.get("CHROMA_DIR", "C:\\Users\student\\Desktop\\6610110408\\Miniproject-social-2\\chroma_db")
 EMBED_MODEL_NAME = os.environ.get("EMBED_MODEL_NAME", "paraphrase-multilingual-MiniLM-L12-v2")
-RETRIEVAL_K = int(os.environ.get("RETRIEVAL_K", "3"))
+RETRIEVAL_K = int(os.environ.get("RETRIEVAL_K", "5"))
 
 CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "10cc7f532a62b2208f2bdeb03148705d")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "o0rmXIz8Xk1QDlHDkPbgLglKWg+qXjzOPnJt/21VmAXGBYuXkFQKlIyt71CpXQrAndBq5tsDAoj9BL+UUiVqkXHj7X1LeM7kRUfoBAgcbTzfo+3me0MPhMcFyF0Hpo1zdrRhbvhzSb5fsbVRURAeVgdB04t89/1O/w1cDnyilFU=")
 
 def build_chat_llm():
-    model_name = os.environ.get("OLLAMA_MODEL", "granite3.3:latest")
+    model_name = os.environ.get("OLLAMA_MODEL", "qwen2.5:latest")
     chat_llm = ChatOllama(model=model_name)
     print(f"[LLM] Using Ollama model: {model_name}")
     return chat_llm
@@ -29,19 +29,19 @@ def build_prompt(context: str, question: str) -> str:
         Context:
         {context}
 
-        Role: You are an engineer.
+        Role: You are a helpful assistant.
+
         Task:
-        - Use a warm and friendly tone
-        - Answer in English language.
-        - Summarize the information clearly and concisely
-        - Make it easy to understand, even for beginners
-        - Include relevant emojis such as 🔋☀️🔌 when appropriate
+        - Analyze the above Thai context
+        - Then answer the user’s question clearly in English
+        - Use simple and friendly language
+        - If possible, include relevant emojis like 😊📘❤️
 
         Question: {question}
         Answer:
         """.strip()
 
-def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k: int = 3) -> str:
+def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k: int = 5) -> str:
     retriever = vectorstore.as_retriever(search_kwargs={"k": k})
     docs: List[Document] = retriever.get_relevant_documents(question)
     context = "\n\n---\n\n".join(d.page_content for d in docs) if docs else "[No document found]"
