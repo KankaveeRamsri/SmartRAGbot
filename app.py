@@ -60,6 +60,11 @@ def build_prompt(context: str, question: str) -> str:
 def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k: int = 5) -> str:
     retriever = vectorstore.as_retriever(search_kwargs={"k": k})
     docs: List[Document] = retriever.get_relevant_documents(question)
+    
+     # ตรวจสอบว่าไม่มีข้อมูลที่เกี่ยวข้อง
+    if not docs:
+        answer = "ขอโทษค่ะ, ฉันไม่พบข้อมูลที่เกี่ยวข้องในเอกสารนี้"
+
     context = "\n\n---\n\n".join(d.page_content for d in docs) if docs else "[No document found]"
     prompt = build_prompt(context=context, question=question)
     response = chat_llm.invoke(prompt)
@@ -116,6 +121,10 @@ def handle_message(event: MessageEvent):
 
     answer = make_rag_answer(app.config["VECTORSTORE"], app.config["CHAT_LLM"], user_text, k=RETRIEVAL_K)
     
+    # ตรวจสอบคำตอบ
+    if "ไม่ทราบ" in answer or "ไม่มีข้อมูล" in answer or "ไม่มีความเกี่ยวข้อง" in answer or "ไม่เกี่ยวข้อง":
+        answer = "ขอโทษค่ะ, ฉันไม่พบข้อมูลที่เกี่ยวข้องในเอกสาร"
+
     user_history[-1]["answer"] = answer
 
     print("Current Length User History: {}".format(len(user_history)))
