@@ -1,4 +1,5 @@
 import os
+import json
 from typing import List
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -18,6 +19,21 @@ RETRIEVAL_K = int(os.environ.get("RETRIEVAL_K", "5"))
 CHANNEL_SECRET = os.environ.get("LINE_CHANNEL_SECRET", "10cc7f532a62b2208f2bdeb03148705d")
 CHANNEL_ACCESS_TOKEN = os.environ.get("LINE_CHANNEL_ACCESS_TOKEN", "o0rmXIz8Xk1QDlHDkPbgLglKWg+qXjzOPnJt/21VmAXGBYuXkFQKlIyt71CpXQrAndBq5tsDAoj9BL+UUiVqkXHj7X1LeM7kRUfoBAgcbTzfo+3me0MPhMcFyF0Hpo1zdrRhbvhzSb5fsbVRURAeVgdB04t89/1O/w1cDnyilFU=")
 
+user_history = list()
+history_file = "user_history.json"
+
+# ฟังก์ชันสำหรับอ่านข้อมูลจากไฟล์ JSON
+def load_user_history():
+    if os.path.exists(history_file):
+        with open(history_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return []
+
+# ฟังก์ชันสำหรับบันทึกข้อมูลลงไฟล์ JSON
+def save_user_history(user_history):
+    with open(history_file, "w", encoding="utf-8") as f:
+        json.dump(user_history, f, ensure_ascii=False, indent=4)
+
 def build_chat_llm():
     model_name = os.environ.get("OLLAMA_MODEL", "qwen2.5:latest")
     chat_llm = ChatOllama(model=model_name)
@@ -33,7 +49,7 @@ def build_prompt(context: str, question: str) -> str:
 
         Task:
         - Analyze the above Thai context
-        - Then answer the user’s question clearly in English
+        - Then answer the user’s question clearly in Thai
         - Use simple and friendly language
         - If possible, include relevant emojis like 😊📘❤️
 
@@ -70,6 +86,14 @@ def handle_message(event: MessageEvent):
     if not user_text:
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text="(empty message)"))
         return
+    
+    user_history = load_user_history()
+
+    if len(user_history) >= 5:
+        user_history = []
+    
+    user_history.append({"question": user_text,
+                         "answer": None})
 
     if user_text.lower() in {"/help", "help"}:
         help_msg = (
@@ -91,6 +115,13 @@ def handle_message(event: MessageEvent):
         return
 
     answer = make_rag_answer(app.config["VECTORSTORE"], app.config["CHAT_LLM"], user_text, k=RETRIEVAL_K)
+    
+    user_history[-1]["answer"] = answer
+
+    print("Current Length User History: {}".format(len(user_history)))
+    
+    save_user_history(user_history)
+    
     if len(answer) > 1900:
         answer = answer[:1900] + "\n… (truncated)"
     line_bot_api.reply_message(event.reply_token, TextSendMessage(text=answer))
