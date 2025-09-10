@@ -49,7 +49,8 @@ def build_prompt(context: str, question: str) -> str:
 
         Task:
         - Analyze the above Thai context
-        - Then answer the user’s question clearly in Thai
+        - Then answer the user’s question clearly in **Thai only**
+        - Do not switch language even if there are other languages in the context
         - Use simple and friendly language
         - If possible, include relevant emojis like 😊📘❤️
 
@@ -64,8 +65,15 @@ def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k:
      # ตรวจสอบว่าไม่มีข้อมูลที่เกี่ยวข้อง
     if not docs:
         answer = "ขอโทษค่ะ, ฉันไม่พบข้อมูลที่เกี่ยวข้องในเอกสารนี้"
+    
+    def clean_context(context: str) -> str:
+        banned_patterns = ["<im_start>", "<im_end>", "<|im_start|>", "<|im_end|>"]
+        for pattern in banned_patterns:
+            context = context.replace(pattern, "")
+        return context
 
     context = "\n\n---\n\n".join(d.page_content for d in docs) if docs else "[No document found]"
+    context = clean_context(context)
     prompt = build_prompt(context=context, question=question)
     response = chat_llm.invoke(prompt)
     answer = getattr(response, "content", None) or str(response)
@@ -122,7 +130,7 @@ def handle_message(event: MessageEvent):
     answer = make_rag_answer(app.config["VECTORSTORE"], app.config["CHAT_LLM"], user_text, k=RETRIEVAL_K)
     
     # ตรวจสอบคำตอบ
-    if "ไม่ทราบ" in answer or "ไม่มีข้อมูล" in answer or "ไม่มีความเกี่ยวข้อง" in answer or "ไม่เกี่ยวข้อง":
+    if "ไม่ทราบ" in answer or "ไม่มีข้อมูล" in answer or "ไม่มีความเกี่ยวข้อง" in answer or "ไม่เกี่ยวข้อง" in answer:
         answer = "ขอโทษค่ะ, ฉันไม่พบข้อมูลที่เกี่ยวข้องในเอกสาร"
 
     user_history[-1]["answer"] = answer
