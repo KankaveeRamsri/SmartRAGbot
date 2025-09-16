@@ -1,5 +1,6 @@
 import os
 import json
+import time
 from typing import List
 from flask import Flask, request, abort
 from linebot import LineBotApi, WebhookHandler
@@ -35,36 +36,44 @@ def save_user_history(user_history):
         json.dump(user_history, f, ensure_ascii=False, indent=4)
 
 def build_chat_llm():
-    model_name = os.environ.get("OLLAMA_MODEL", "qwen2.5:latest")
+    model_name = os.environ.get("OLLAMA_MODEL", "gemma3:4b")
     chat_llm = ChatOllama(model=model_name)
     print(f"[LLM] Using Ollama model: {model_name}")
     return chat_llm
 
-def build_prompt(context: str, question: str) -> str:
+def build_prompt(context: str, question: str, history: List[dict]) -> str:
+    history_text = ""
+    for h in history[-3:]:  # ใช้แค่ 3 บทสนทนาล่าสุด
+        q = h.get("question", "")
+        a = h.get("answer", "")
+        history_text += f"ผู้ใช้: {q}\nผู้ช่วย: {a}\n"
+
     return f"""
         Context:
         {context}
+
+        Previous conversation:
+        {history_text}
+
+        Current question:
+        {question}
 
         Role: You are a helpful assistant.
 
         Task:
         - Analyze the above Thai context
-        - Then answer the user’s question clearly in **Thai only**
+        - Then answer the user’s question clearly in **Thai only** using simple and friendly language
         - Do not switch language even if there are other languages in the context
-        - Use simple and friendly language
+        - If the question is unrelated to the context, say clearly: "ขอโทษค่ะ คำถามนี้อยู่นอกเหนือจากเนื้อหาในเอกสาร"
         - If possible, include relevant emojis like 😊📘❤️
 
         Question: {question}
         Answer:
         """.strip()
 
-def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k: int = 5) -> str:
+def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, history: List[dict], k: int = 3) -> str:
     retriever = vectorstore.as_retriever(search_kwargs={"k": k})
     docs: List[Document] = retriever.get_relevant_documents(question)
-    
-     # ตรวจสอบว่าไม่มีข้อมูลที่เกี่ยวข้อง
-    if not docs:
-        answer = "ขอโทษค่ะ, ฉันไม่พบข้อมูลที่เกี่ยวข้องในเอกสารนี้"
     
     def clean_context(context: str) -> str:
         banned_patterns = ["<im_start>", "<im_end>", "<|im_start|>", "<|im_end|>"]
@@ -74,7 +83,8 @@ def make_rag_answer(vectorstore: Chroma, chat_llm: ChatOllama, question: str, k:
 
     context = "\n\n---\n\n".join(d.page_content for d in docs) if docs else "[No document found]"
     context = clean_context(context)
-    prompt = build_prompt(context=context, question=question)
+
+    prompt = build_prompt(context=context, question=question,  history=history)
     response = chat_llm.invoke(prompt)
     answer = getattr(response, "content", None) or str(response)
     return answer.strip() if answer else "[ERROR] Empty response from LLM."
@@ -105,9 +115,35 @@ def handle_message(event: MessageEvent):
     if len(user_history) >= 5:
         user_history = []
     
-    user_history.append({"question": user_text,
-                         "answer": None})
+    if user_text.lower() not in {"ประวัติ", "history"}:
+        user_history.append({"question": user_text, "answer": None})
+
     
+    start_time = time.time()
+    
+    if user_text.lower() in {"ประวัติ", "history"}:
+        if not user_history:
+            reply_text = "ยังไม่มีประวัติการถามตอบค่ะ 😊"
+        else:
+            reply_lines = ["📜 ประวัติการถาม-ตอบล่าสุด:"]
+            for idx, entry in enumerate(user_history[-5:], start=1):  # เอา 5 อันล่าสุด
+                q = entry.get("question", "-")
+                a = entry.get("answer", "-")
+                reply_lines.append(f"{idx}. ❓ {q}\n   ➡️ {a}")
+            reply_text = "\n\n".join(reply_lines)
+        line_bot_api.reply_message(event.reply_token, TextSendMessage(text=reply_text))
+        return
+    
+        # ✅ คำสั่งล้างประวัติ
+    if user_text.lower() in {"ล้างประวัติ", "เคลียร์", "clear"}:
+        user_history = []
+        save_user_history(user_history)  # เขียนไฟล์ใหม่เป็น []
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text="🧹 ล้างประวัติเรียบร้อยแล้วค่ะ")
+        )
+        return
+
     # ตรวจจับคำทักทายทั่วไป
     greetings = ["สวัสดี", "hello", "hi", "ดีจ้า", "หวัดดี", "ดีครับ", "ดีค่ะ"]
     if user_text.strip() in greetings:
@@ -141,11 +177,28 @@ def handle_message(event: MessageEvent):
         line_bot_api.reply_message(event.reply_token, TextSendMessage(text=f"msg id: {event.message.id}"))
         return
 
-    answer = make_rag_answer(app.config["VECTORSTORE"], app.config["CHAT_LLM"], user_text, k=RETRIEVAL_K)
+    cached_answer = None
+    for entry in user_history:
+        if entry["question"].strip().lower() == user_text.lower():
+            cached_answer = entry.get("answer")
+            break
+
+    if cached_answer:
+        answer = cached_answer + "\n\n🔁 คำถามนี้เคยถามไว้แล้วค่ะ"
+    else:
+        answer = make_rag_answer(app.config["VECTORSTORE"], app.config["CHAT_LLM"], user_text, history=user_history, k=RETRIEVAL_K)
     
     # ตรวจสอบคำตอบ
     if "ไม่ทราบ" in answer or "ไม่มีข้อมูล" in answer or "ไม่มีความเกี่ยวข้อง" in answer or "ไม่เกี่ยวข้อง" in answer:
         answer = "ขอโทษค่ะ, ฉันไม่พบข้อมูลที่เกี่ยวข้องในเอกสาร"
+
+    if any(word in answer for word in ["ฉันคิดว่า", "โดยทั่วไป", "ในความเห็นของฉัน", "อาจเป็นไปได้ว่า"]):
+        answer = "ขอโทษค่ะ คำถามนี้ดูเหมือนจะไม่เกี่ยวข้องกับเนื้อหาในเอกสาร"
+
+    elapsed_time = time.time() - start_time
+    seconds_used = round(elapsed_time, 2)
+
+    answer += f"\n\n⏱️ ตอบกลับใน {seconds_used} วินาที"
 
     user_history[-1]["answer"] = answer
 
